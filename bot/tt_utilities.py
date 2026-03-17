@@ -39,11 +39,12 @@ class TTUtilities(TeamTalk):
         self.ssh_config = self.config_handler.get_ssh_config()
         self.teamtalk_license_config = self.config_handler.get_teamtalk_license_config()
         self.cookiefile = cookiefile or self.playback_config.get("cookiefile_path")
-        
+
         self.io_pool = None
         self.quick_task_pool = None
         self.player = Player(self.config_handler, cookiefile=self.cookiefile)
         self.command_handler = CommandHandler(self, prefix='/')
+        self.commands_locked = False
         self.initialize_connection()
         self._register_cogs()
 
