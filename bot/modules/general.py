@@ -54,7 +54,7 @@ class GeneralCog:
         base_url = "http://api.weatherapi.com/v1/forecast.json"
         params = { "key": self.bot.weather_config, "q": f"{city}, {country_name}", "days": 1 }
         try:
-            response = requests.get(base_url, params=params)
+            response = requests.get(base_url, params=params, timeout=10)
             response.raise_for_status()
             data = response.json()
             current = data["current"]
@@ -89,7 +89,8 @@ class GeneralCog:
 
     def _wikipedia_summary_task(self, query, user_id):
         try:
-            lang = langdetect.detect(query)
+            wikipedia.set_user_agent("TTUtilitiesBot/2.3 (contact: https://github.com/dgtproject)")
+            lang = self.bot.bot_config.get('wikipedia_language', 'es')
             wikipedia.set_lang(lang)
             summary = wikipedia.summary(query, sentences=10)
             
@@ -130,11 +131,6 @@ class GeneralCog:
             message = f"{prefix}{name}: {help_text}"
             self.bot.privateMessage(user_id, message)
         
-        self.bot.privateMessage(user_id, self._("--- Special Commands ---"))
-        self.bot.privateMessage(user_id, self._("'<text>: Make the bot speaks some text, Same as /say command, but for quick usability."))
-        self.bot.privateMessage(user_id, self._("+ <seconds (Optional)>, Plus sign: Seek forward in the current media file. Without arguments, seek forward using the default value. With arguments, seek forward by how many seconds are specified. For example, + 10 will seek forward by 10 seconds."))
-        self.bot.privateMessage(user_id, self._("- <seconds (Optional)>, Dash sign: Seek backward in the current media file. With arguments, seek backward using the default value. With arguments, seek backward by how many seconds are specified. For example, -10 will seek backward by 10 seconds."))
-
     def handle_myinfo_command(self, textmessage, *args):
         self.bot.last_command_sender_id = textmessage.nFromUserID
         self.bot.last_command_sender_username = ttstr(textmessage.szFromUsername)

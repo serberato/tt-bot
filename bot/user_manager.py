@@ -40,11 +40,18 @@ class UserManager:
         # 1. Handle Notifications
         if nickname in self.notifications:
             chat_id = self.notifications[nickname]["telegram_chat_id"]
-            utils.send_telegram_notification(self.bot.telegram_config['telegram_bot_token'], chat_id, self._("Hello. Important: The user {name} has logged in.").format(name=nickname))
+            
+            def notify_nickname():
+                utils.send_telegram_notification(self.bot.telegram_config['telegram_bot_token'], chat_id, self._("Hello. Important: The user {name} has logged in.").format(name=nickname))
+            self.bot.quick_task_pool.submit(notify_nickname)
             del self.notifications[nickname]
+            
         if username in self.username_notifications:
             chat_id = self.username_notifications[username]["telegram_chat_id"]
-            utils.send_telegram_notification(self.bot.telegram_config['telegram_bot_token'], chat_id, self._("Hello. Important: The user {username} has logged in.").format(username=username))
+            
+            def notify_username():
+                utils.send_telegram_notification(self.bot.telegram_config['telegram_bot_token'], chat_id, self._("Hello. Important: The user {username} has logged in.").format(username=username))
+            self.bot.quick_task_pool.submit(notify_username)
             del self.username_notifications[username]
 
         # 2. Deliver Pending Messages
@@ -55,23 +62,26 @@ class UserManager:
         
         # 3. Handle Welcome Message and Location-based Actions
         if self.bot.bot_config.get("welcome_broadcast", True):
-            country, city = self.get_user_location(user.nUserID)
-            if country and city:
-                welcome_messages = [
-                    self._("Welcome, {nickname} from {country}!").format(nickname=ttstr(user.szNickname), country=country),
-                    self._("Ahoy there, {nickname} from {country}! Welcome aboard!").format(nickname=ttstr(user.szNickname), country=country),
-                    self._("Greetings, {nickname} of {country}! We're glad to have you here.").format(nickname=ttstr(user.szNickname), country=country),
-                    self._("Howdy, {nickname}! Welcome from {country}.").format(nickname=ttstr(user.szNickname), country=country),
-                    self._("Whoa! {nickname} just arrived from {country}! Let's party!").format(nickname=ttstr(user.szNickname), country=country),
-                    self._("Look who's here! {nickname} from {country} just logged in!").format(nickname=ttstr(user.szNickname), country=country),
-                    self._("Good vibes only for {nickname} from {country}! Welcome, my friend!").format(nickname=ttstr(user.szNickname), country=country),
-                    self._("Surprise, surprise! It's {nickname} from {country}! Glad to have you!").format(nickname=ttstr(user.szNickname), country=country),
-                    self._("Let the fun begin! Welcome, {nickname} from the land of {country}!").format(nickname=ttstr(user.szNickname), country=country)
-                ]
+            def welcome_task():
+                country, city = self.get_user_location(user.nUserID)
+                if country and city:
+                    welcome_messages = [
+                        self._("Welcome, {nickname} from {country}!").format(nickname=ttstr(user.szNickname), country=country),
+                        self._("Ahoy there, {nickname} from {country}! Welcome aboard!").format(nickname=ttstr(user.szNickname), country=country),
+                        self._("Greetings, {nickname} of {country}! We're glad to have you here.").format(nickname=ttstr(user.szNickname), country=country),
+                        self._("Howdy, {nickname}! Welcome from {country}.").format(nickname=ttstr(user.szNickname), country=country),
+                        self._("Whoa! {nickname} just arrived from {country}! Let's party!").format(nickname=ttstr(user.szNickname), country=country),
+                        self._("Look who's here! {nickname} from {country} just logged in!").format(nickname=ttstr(user.szNickname), country=country),
+                        self._("Good vibes only for {nickname} from {country}! Welcome, my friend!").format(nickname=ttstr(user.szNickname), country=country),
+                        self._("Surprise, surprise! It's {nickname} from {country}! Glad to have you!").format(nickname=ttstr(user.szNickname), country=country),
+                        self._("Let the fun begin! Welcome, {nickname} from the land of {country}!").format(nickname=ttstr(user.szNickname), country=country)
+                    ]
 
-                self.bot.send_broadcast_message(random.choice(welcome_messages))
-            else:
-                self.bot.send_broadcast_message(self._("{nickname} has joined the server").format(nickname=nickname))
+                    self.bot.send_broadcast_message(random.choice(welcome_messages))
+                else:
+                    self.bot.send_broadcast_message(self._("{nickname} has joined the server").format(nickname=nickname))
+            
+            self.bot.io_pool.submit(welcome_task)
 
     def on_user_parted(self, user):
         """Cleans up all data associated with a user when they leave or log out."""
@@ -92,36 +102,44 @@ class UserManager:
 
     def handle_who_command(self, textmessage, *args):
         user_id = textmessage.nFromUserID
-        self.get_user_location(user_id) # Ensure user's own location is cached
         
-        if user_id in self.user_ip_info and self.user_ip_info[user_id].get("country"):
-            user_country = self.user_ip_info[user_id]["country"]
-            count = sum(1 for info in self.user_ip_info.values() if info.get("country") == user_country)
+        def who_task():
+            self.get_user_location(user_id) # Ensure user's own location is cached
             
-            if count == 1:
-                self.bot.privateMessage(user_id, self._("You are the only one from {country}.").format(country=user_country))
+            if user_id in self.user_ip_info and self.user_ip_info[user_id].get("country"):
+                user_country = self.user_ip_info[user_id]["country"]
+                count = sum(1 for info in self.user_ip_info.values() if info.get("country") == user_country)
+                
+                if count == 1:
+                    self.bot.privateMessage(user_id, self._("You are the only one from {country}.").format(country=user_country))
+                else:
+                    self.bot.privateMessage(user_id, self._("There are {count} users from {country}.").format(count=count, country=user_country))
             else:
-                self.bot.privateMessage(user_id, self._("There are {count} users from {country}.").format(count=count, country=user_country))
-        else:
-            self.bot.privateMessage(user_id, self._("Sorry, your country information is not available."))
+                self.bot.privateMessage(user_id, self._("Sorry, your country information is not available."))
+                
+        self.bot.io_pool.submit(who_task)
 
     def handle_whoall_command(self, textmessage, *args):
         user_id = textmessage.nFromUserID
-        for user in self.bot.getServerUsers():
-            self.get_user_location(user.nUserID)
+        
+        def whoall_task():
+            for user in self.bot.getServerUsers():
+                self.get_user_location(user.nUserID)
 
-        country_counts = {}
-        for info in self.user_ip_info.values():
-            country = info.get("country")
-            if country:
-                country_counts[country] = country_counts.get(country, 0) + 1
+            country_counts = {}
+            for info in self.user_ip_info.values():
+                country = info.get("country")
+                if country:
+                    country_counts[country] = country_counts.get(country, 0) + 1
 
-        if country_counts:
-            message_parts = [self._("There are {count} users from {country}").format(count=count, country=country) for country, count in country_counts.items()]
-            full_message = self._("Currently: ") + ", ".join(message_parts) + "."
-            self.bot.privateMessage(user_id, full_message)
-        else:
-            self.bot.privateMessage(user_id, self._("No country information available for users."))
+            if country_counts:
+                message_parts = [self._("There are {count} users from {country}").format(count=count, country=country) for country, count in country_counts.items()]
+                full_message = self._("Currently: ") + ", ".join(message_parts) + "."
+                self.bot.privateMessage(user_id, full_message)
+            else:
+                self.bot.privateMessage(user_id, self._("No country information available for users."))
+                
+        self.bot.io_pool.submit(whoall_task)
 
     def handle_notify_command(self, textmessage, *args):
         try:
@@ -195,20 +213,24 @@ class UserManager:
 
     def handle_users_command(self, textmessage, *args):
         recipient_id = textmessage.nFromUserID
-        for user in self.bot.getServerUsers():
-            if user.nUserID == self.bot.getMyUserID(): continue
-            
-            country, _ = self.get_user_location(user.nUserID)
-            user_type_str = 'Administrator' if user.uUserType == UserType.USERTYPE_ADMIN else "User"
-            
-            user_info = self._("Nickname: {nickname}\nUsername: {username}\nType: {type}\nFrom: {country}\nStatus message: {status}").format(
-                nickname=ttstr(user.szNickname), 
-                username=ttstr(user.szUsername),
-                type=user_type_str, 
-                country=country or "Unknown", 
-                status=ttstr(user.szStatusMsg)
-            )
-            self.bot.privateMessage(recipient_id, user_info)
+        
+        def users_task():
+            for user in self.bot.getServerUsers():
+                if user.nUserID == self.bot.getMyUserID(): continue
+                
+                country, _ = self.get_user_location(user.nUserID)
+                user_type_str = 'Administrator' if user.uUserType == UserType.USERTYPE_ADMIN else "User"
+                
+                user_info = self._("Nickname: {nickname}\nUsername: {username}\nType: {type}\nFrom: {country}\nStatus message: {status}").format(
+                    nickname=ttstr(user.szNickname), 
+                    username=ttstr(user.szUsername),
+                    type=user_type_str, 
+                    country=country or "Unknown", 
+                    status=ttstr(user.szStatusMsg)
+                )
+                self.bot.privateMessage(recipient_id, user_info)
+                
+        self.bot.io_pool.submit(users_task)
 
     
     def get_user_location(self, user_id):
@@ -282,7 +304,7 @@ class UserManager:
                     self.bot.doChannelOp(sender_user.nUserID, channel_id, bMakeOperator=True)
                     self.bot.doChannelOp(second_user.nUserID, channel_id, bMakeOperator=True)
             
-            Thread(target=move_users_to_channel).start()
+            self.bot.quick_task_pool.submit(move_users_to_channel)
 
     def cleanup_private_channel(self, user):
         user_nickname = ttstr(user.szNickname)

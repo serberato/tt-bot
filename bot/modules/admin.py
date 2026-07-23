@@ -18,6 +18,24 @@ class AdminCog:
         self.pending_kicks = {}
         self.banned_users = {}
         self.duration_bans = {}
+        Thread(target=self._ban_cleanup_loop, daemon=True).start()
+
+    def _ban_cleanup_loop(self):
+        """Periodically checks and removes expired bans and kicks."""
+        while True:
+            time.sleep(60)
+            now = time.time()
+            for identifier, (banned_user_obj, end_time) in list(self.duration_bans.items()):
+                if now >= end_time:
+                    self.unban_user(banned_user_obj)
+                    if identifier in self.duration_bans:
+                        del self.duration_bans[identifier]
+            for user_data, (duration, end_time) in list(self.duration_kicks.items()):
+                if now >= end_time:
+                    del self.duration_kicks[user_data]
+            for target_lower, (target_type, duration, end_time) in list(self.pending_kicks.items()):
+                if now >= end_time:
+                    del self.pending_kicks[target_lower]
 
     def register(self, command_handler):
         """Registers all the admin commands."""
@@ -34,7 +52,6 @@ class AdminCog:
         command_handler.register_command('cs', self.handle_change_status, admin_only=True, help_text=self._("Changes the bot's status message. Usage: /cs <new_status>"))
         command_handler.register_command('cg', self.handle_change_gender, admin_only=True, help_text=self._("Changes the bot's gender. Usage: /cg <m|f|n>. send /cg without arguments for more details."))
         command_handler.register_command('new', self.handle_new_account_command, admin_only=True, help_text=self._("Creates a new user account. Usage: /new <user> <pass> [rights]. the rights is a list of user rights separated by spaces for each number."))
-        command_handler.register_command('cm', self.handle_channel_messages_command, admin_only=True, help_text=self._("Toggle playback channel messages on or off. Usage: /cm"))
         command_handler.register_command('l', self.handle_lock_command, admin_only=True, help_text=self._("Locks or unlocks bot commands (admins only). Usage: /l"))
         command_handler.register_command('shutdown', self.handle_shutdown_command, admin_only=True, help_text=self._("Shuts down the bot."))
         command_handler.register_command('sd', self.handle_shutdown_command, admin_only=True, help_text=self._("Alias for /shutdown."))
@@ -155,13 +172,16 @@ class AdminCog:
 
         message_text = ttstr(textmessage.szMessage)
         blacklist = utils.load_blacklist("blacklist.txt")
-        pattern = r"\b(" + "|".join(re.escape(word) for word in blacklist) + r")\b"
+        
+        if not blacklist:
+            return False
 
-        if blacklist and re.search(pattern, message_text, re.IGNORECASE):
-            streamer = teamtalk.VideoCodec()
-            streamer.nCodec = 1
-            self.bot.startStreamingMediaFileToChannel(ttstr(os.path.join("files", "blacklist.wav")), streamer)
-            
+        if not hasattr(self, '_cached_blacklist') or self._cached_blacklist != blacklist:
+            self._cached_blacklist = blacklist
+            pattern = r"\b(" + "|".join(re.escape(word) for word in blacklist) + r")\b"
+            self._cached_pattern = re.compile(pattern, re.IGNORECASE)
+
+        if self._cached_pattern.search(message_text):
             if self.bot.bot_config['blacklist_mode'] == 1:
                 self.bot.kick_user(textmessage.nFromUserID)
             elif self.bot.bot_config['blacklist_mode'] == 2:
@@ -227,10 +247,12 @@ class AdminCog:
             duration_seconds = self.parse_duration_string(duration_str)
             user = self.bot.getUserByName(nickname)
             if user:
-                self.bot.ban_user(user.nUserID, ban_type)
-                self.bot.send_message(self._("{nickname} has been banned for {duration}.").format(nickname=ttstr(user.szNickname), duration=duration_str))
-                Thread(target=self.remove_ban_after_duration, args=(user, duration_seconds, ban_type)).start()
-                self.bot.kick_user(user.nUserID)
+                banned_user_obj = self.ban_user(user.nUserID, ban_type)
+                if banned_user_obj:
+                    identifier = ttstr(banned_user_obj.szIPAddress) if banned_user_obj.uBanTypes == BanType.BANTYPE_IPADDR else ttstr(banned_user_obj.szUsername)
+                    self.duration_bans[identifier] = (banned_user_obj, time.time() + duration_seconds)
+                    self.bot.send_message(self._("{nickname} has been banned for {duration}.").format(nickname=ttstr(user.szNickname), duration=duration_str))
+                    self.bot.kick_user(user.nUserID)
             else:
                 self.bot.privateMessage(textmessage.nFromUserID, self._("User '{nickname}' not found.").format(nickname=nickname))
         except (ValueError, IndexError):
@@ -293,17 +315,7 @@ class AdminCog:
                 raise ValueError(f"Invalid duration part: {part}")
         return duration_seconds
 
-    def remove_ban_after_duration(self, user, duration_seconds, ban_type):
-        time.sleep(duration_seconds)
-        if ban_type == BanType.BANTYPE_IPADDR:
-            self.bot.doUnBanUser(user.szIPAddress, 0)
-            self.bot.send_message(self._("{nickname} (IP ban) has been unbanned.").format(nickname=ttstr(user.szNickname)))
-        else:
-            banned_user = BannedUser()
-            banned_user.szUsername = user.szUsername
-            banned_user.uBanTypes = BanType.BANTYPE_USERNAME
-            self.bot.doUnbanUserEx(banned_user)
-            self.bot.send_message(self._("{nickname} (Username ban) has been unbanned.").format(nickname=ttstr(user.szNickname)))
+
 
 
     def handle_change_name_command(self, textmessage, *args):
@@ -339,14 +351,7 @@ class AdminCog:
             
     def save_bot_config(self, textmessage, *args):
         self.bot.config_handler.save_bot_config(self.bot.bot_config)
-        self.bot.config_handler.save_playback_config(self.bot.playback_config)
         self.bot.privateMessage(textmessage.nFromUserID, self._("Bot configuration saved."))
-
-    def handle_channel_messages_command(self, textmessage, *args):
-        current = self.bot.playback_config.get("send_channel_messages", True)
-        self.bot.playback_config["send_channel_messages"] = not current
-        state = self._("enabled") if self.bot.playback_config["send_channel_messages"] else self._("disabled")
-        self.bot.privateMessage(textmessage.nFromUserID, self._("Playback channel messages are now {state}.").format(state=state))
 
     def handle_new_account_command(self, textmessage, *args):
         try:
@@ -432,37 +437,29 @@ class AdminCog:
 
     def ban_user(self, user_id, ban_type=BanType.BANTYPE_USERNAME):
         """Bans a user by either IP or Username, updating internal state."""
-        while True:
-            user = self.bot.getUser(user_id)
-            if user is not None:
-                break
-            else:
-                continue
+        user = self.bot.getUser(user_id)
+        if user is None:
+            print(f"Admin: Could not get user {user_id}")
+            return None
 
         banned_user = BannedUser()        
         effective_ban_type = ban_type
         identifier = None
 
         if ban_type == BanType.BANTYPE_IPADDR:
-            while True:
-                identifier = ttstr(user.szIPAddress)
-                if identifier is None or identifier == "": continue
-                else: break
+            identifier = ttstr(user.szIPAddress)
         else:
             username = ttstr(user.szUsername)
             if username == 'guest' or username == self.bot.accounts_config.get('custom_username', ''):
                 # Fallback to IP ban for guest-like accounts
                 effective_ban_type = BanType.BANTYPE_IPADDR
-                while True:
-                    identifier = ttstr(user.szIPAddress)
-                    if identifier is None or identifier == "": continue
-                    else: break
+                identifier = ttstr(user.szIPAddress)
             else:
                 identifier = username
 
         if not identifier:
-            print(f"Admin: Could not get a valid identifier to ban user {user.szNickname}")
-            return
+            print(f"Admin: Could not get a valid identifier to ban user {ttstr(user.szNickname)}")
+            return None
             
         if effective_ban_type == BanType.BANTYPE_IPADDR:
             banned_user.szIPAddress = ttstr(identifier)
@@ -472,3 +469,4 @@ class AdminCog:
         banned_user.uBanTypes = effective_ban_type        
         self.banned_users[identifier] = banned_user
         self.bot.doBan(banned_user)
+        return banned_user

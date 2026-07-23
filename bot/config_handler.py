@@ -3,15 +3,13 @@ import configparser
 import os
 import ast
 import sys
-import TeamTalk5 as teamtalk
-import mpv
 import getpass
 
 class ConfigHandler:
     """
     Manages reading and writing the bot's configuration file (config.ini).
     If the file doesn't exist, it guides the user through an interactive
-    setup process via the terminal or a graphical interface on Windows.
+    setup process via the terminal.
     """
 
     def __init__(self, config_file="config.ini"):
@@ -32,12 +30,13 @@ class ConfigHandler:
             # Each dict represents a single configuration key.
             # 'section' and 'key' are mandatory.
             # 'prompt' and 'help_text' are for user interaction.
-            # 'type' determines the kind of input (text, int, float, bool, choice, device, password).
+            # 'type' determines the kind of input (text, int, float, bool, choice, password).
             # 'default' provides a fallback value.
             # 'required' ensures a value must be present.
 
             {'type': 'header', 'text': self._("Language Selection")},
             {'section': 'bot', 'key': 'language', 'type': 'language', 'prompt': self._("Setup Language"), 'help_text': self._("Choose the language for the bot and setup process."), 'default': 'en'},
+            {'section': 'bot', 'key': 'wikipedia_language', 'type': 'language', 'prompt': self._("Wikipedia Search Language"), 'help_text': self._("Choose the language for Wikipedia search results (e.g. 'es' for Spanish, 'en' for English)."), 'default': 'es'},
 
             {'type': 'header', 'text': self._("TeamTalk Server Connection")},
             {'section': 'server', 'key': 'address', 'type': 'text', 'prompt': self._("Server Address"), 'help_text': self._("The IP address or hostname of the TeamTalk server (e.g., myserver.com)."), 'required': True},
@@ -56,17 +55,6 @@ class ConfigHandler:
             {'section': 'bot', 'key': 'welcome_broadcast', 'type': 'bool', 'prompt': self._("Send Welcome Broadcast?"), 'help_text': self._("Send a public welcome message when a user logs in."), 'default': True},
             {'section': 'bot', 'key': 'random_message_interval', 'type': 'int', 'prompt': self._("Random Message Interval (minutes)"), 'help_text': self._("Interval in minutes for sending random broadcast messages from messages.txt. Set to 0 to disable."), 'default': 0},
 
-            {'type': 'header', 'text': self._("Audio and Playback Settings")},
-            {'section': 'playback', 'key': 'input_device', 'type': 'device', 'device_type': 'input', 'prompt': self._("Input Device"), 'help_text': self._("The audio device for voice transmission.")},
-            {'section': 'playback', 'key': 'output_device', 'type': 'device', 'device_type': 'output', 'prompt': self._("Output Device"), 'help_text': self._("The audio device for media playback.")},
-            {'section': 'playback', 'key': 'seek_step', 'type': 'int', 'prompt': self._("Seek Step (seconds)"), 'help_text': self._("Default number of seconds to seek forward/backward in media playback."), 'default': 5},
-            {'section': 'playback', 'key': 'default_volume', 'type': 'int', 'prompt': self._("Default Playback Volume"), 'help_text': self._("The initial volume for media playback (0-100)."), 'default': 80},
-            {'section': 'playback', 'key': 'max_volume', 'type': 'int', 'prompt': self._("Maximum Playback Volume"), 'help_text': self._("The highest volume users can set (e.g., 100)."), 'default': 100},
-            {'section': 'playback', 'key': 'send_channel_messages', 'type': 'bool', 'prompt': self._("Send Playback Messages to Channel?"), 'help_text': self._("Announce playback actions (play/pause/stop/volume) in the channel."), 'default': True},
-            {'section': 'playback', 'key': 'channel_messages_mode', 'type': 'choice', 'prompt': self._("If Disabled, Send Playback Messages By"), 'help_text': self._("Choose whether to send playback messages privately or stay silent when channel announcements are disabled."), 'options': {'Private messages': 'private', 'Silent': 'silent'}, 'default': 'Private messages'},
-            {'section': 'playback', 'key': 'volume_fading', 'type': 'float', 'prompt': self._("Volume Fading (seconds)"), 'help_text': self._("Fade audio when seeking or changing volume. Set to 0 to disable."), 'default': 0.0},
-            {'section': 'playback', 'key': 'cookiefile_path', 'type': 'text', 'prompt': self._("Cookies File Path"), 'help_text': self._("Optional path to a cookies file (e.g., cookies.txt) for yt-dlp to access private or restricted videos.")},
-
             {'type': 'header', 'text': self._("Moderation and Security")},
             {'section': 'bot', 'key': 'vpn_detection', 'type': 'bool', 'prompt': self._("Enable VPN/Proxy Detection?"), 'help_text': self._("Check if users are connecting via a known VPN or proxy service."), 'default': True},
             {'section': 'bot', 'key': 'prevent_noname', 'type': 'bool', 'prompt': self._("Kick 'NoName' users?"), 'help_text': self._("Automatically kick users who log in with the default 'NoName' nickname."), 'default': True},
@@ -76,7 +64,6 @@ class ConfigHandler:
             {'section': 'bot', 'key': 'char_limit_mode', 'type': 'choice', 'prompt': self._("Action for Long Nicknames"), 'help_text': self._("What to do when a user's nickname exceeds the character limit."), 'options': {'Kick the user': '1', 'Ban the user': '2'}, 'default': 'Kick the user'},
             {'section': 'bot', 'key': 'blacklist_mode', 'type': 'choice', 'prompt': self._("Action for Blacklisted Words"), 'help_text': self._("What to do when a user uses a word from blacklist.txt in their name or messages."), 'options': {'Kick the user': '1', 'Ban the user': '2'}, 'default': 'Kick the user'},
             {'section': 'bot', 'key': 'banned_countries', 'type': 'text', 'prompt': self._("Banned Countries"), 'help_text': self._("A comma-separated list of country names to ban from the server (e.g., North Korea,Israel).")},
-            {'section': 'bot', 'key': 'video_deletion_timer', 'type': 'int', 'prompt': self._("Uploaded Video Deletion Timer (minutes)"), 'help_text': self._("Time in minutes before a downloaded/uploaded video is automatically deleted from the server channel. Set to 0 to disable."), 'default': 15},
 
             {'type': 'header', 'text': self._("Jail System")},
             {'section': 'bot', 'key': 'jail_users', 'type': 'text', 'prompt': self._("Jailed Usernames"), 'help_text': self._("A comma-separated list of usernames to automatically confine to the jail channel upon login.")},
@@ -110,13 +97,11 @@ class ConfigHandler:
             {'section': 'teamtalk_license', 'key': 'license_key', 'type': 'text', 'prompt': self._("License Key"), 'help_text': self._("Your TeamTalk SDK license key.")},
         ]
                 
-    def _select_language_and_translate_structure(self, ask_in_terminal=True):
+    def _select_language_and_translate_structure(self):
         """
         Sets the language and translates the prompts in CONFIG_STRUCTURE.
-        The `ask_in_terminal` flag prevents the terminal prompt on Windows.
         """
-        if ask_in_terminal:
-            self.select_language()
+        self.select_language()
         
         gettext.bindtextdomain("messages", "locales")
         gettext.textdomain("messages")
@@ -167,14 +152,11 @@ class ConfigHandler:
     def read_config_file(self):
         """
         Reads the configuration file. If it doesn't exist, launches the
-        appropriate setup wizard (GUI for Windows, Terminal for others).
+        terminal setup wizard.
         """
         if not os.path.isfile(self.config_file):
-            if sys.platform == "win32":
-                self._run_gui_wizard()
-            else:
-                self.select_language()
-                self.create_config_file_terminal(self.CONFIG_STRUCTURE)
+            self.select_language()
+            self.create_config_file_terminal(self.CONFIG_STRUCTURE)
                 
         self.config.read(self.config_file)
 
@@ -184,12 +166,9 @@ class ConfigHandler:
             print(self._("Warning: Your config.ini is missing some settings."))
             if self.config.has_option('bot', 'language'):
                 self.language = self.config.get('bot', 'language')
-            if sys.platform == "win32":
-                self._select_language_and_translate_structure(ask_in_terminal=False)
-                self._prompt_for_missing(missing_items)
-            else:
-                self._select_language_and_translate_structure(ask_in_terminal=True)
-                self._prompt_for_missing(missing_items)
+            
+            self._select_language_and_translate_structure()
+            self._prompt_for_missing(missing_items)
             self.config.read(self.config_file)
 
     def _validate_config(self):
@@ -206,34 +185,9 @@ class ConfigHandler:
         return missing
 
     def _prompt_for_missing(self, missing_items):
-        """Launches the appropriate UI to ask the user for missing values."""
-        if sys.platform == "win32":
-            self._run_gui_missing_dialog(missing_items)
-        else:
-            print(self._("I'll ask you for the required values now."))
-            self.create_config_file_terminal(missing_items)
-
-    def _run_gui_wizard(self):
-        """Runs the full GUI setup wizard."""
-        import wx
-        import wx.lib.scrolledpanel as scrolled
-        from bot.gui import ConfigWizard
-        app = wx.App(False)
-        wizard = ConfigWizard(None, self._("TTUtilities Bot Configuration"), self.CONFIG_STRUCTURE, self._)
-        app.MainLoop()
-        if not os.path.isfile(self.config_file):
-            print(self._("Configuration was not saved. Exiting."))
-            sys.exit(1)
-
-    def _run_gui_missing_dialog(self, missing_items):
-        """Runs the GUI dialog to fix a broken config."""
-        import wx
-        import wx.lib.scrolledpanel as scrolled
-        from bot.gui import MissingConfigDialog
-        app = wx.App(False)
-        dialog = MissingConfigDialog(None, self._("Missing Configuration"), missing_items, self.config_file)
-        app.MainLoop()
-
+        """Launches the UI to ask the user for missing values."""
+        print(self._("I'll ask you for the required values now."))
+        self.create_config_file_terminal(missing_items)
 
     def _print_header(self, text):
         """Prints a formatted section header."""
@@ -332,29 +286,10 @@ class ConfigHandler:
             except ValueError:
                 print(self._("Invalid input. Please enter a number."))
 
-    def _get_devices(self, type):
-        """Helper to get audio devices from TeamTalk or MPV."""
-        if type == 'input':
-            try:
-                tt = teamtalk.TeamTalk()
-                devices = tt.getSoundDevices()
-                tt.closeTeamTalk()
-                return [d for d in devices if d.nMaxInputChannels > 0]
-            except Exception:
-                return []
-        elif type == 'output':
-            try:
-                player = mpv.MPV(vo='null', video=False)
-                devices = player.audio_device_list
-                player.terminate()
-                return devices
-            except Exception:
-                return []
-
     def create_config_file_terminal(self, items_to_ask):
         """
         Guides the user through creating a config.ini file via a data-driven
-        terminal interface. This replaces the old, hardcoded method.
+        terminal interface.
         """
         if len(items_to_ask) == len(self.CONFIG_STRUCTURE):
             print(self._("Welcome to the TTUtilities Bot setup wizard!"))
@@ -362,7 +297,6 @@ class ConfigHandler:
         
         collected_values = {}
         for item in items_to_ask:
-            # The header is only useful in the full setup wizard
             if item.get('type') in ['header', 'language']:
                 if item.get('type') == 'header' and len(items_to_ask) == len(self.CONFIG_STRUCTURE):
                     self._print_header(item['text'])
@@ -386,18 +320,6 @@ class ConfigHandler:
                 value = self._ask_bool(prompt, help_text, default)
             elif item_type == 'choice':
                 value = self._ask_choice(prompt, help_text, item['options'], default)
-            elif item_type == 'device':
-                devices = self._get_devices(item['device_type'])
-                if not devices:
-                    print(self._("Could not find any {type} devices. You may need to set this manually in config.ini.").format(type=item['device_type']))
-                    value = -1 # Default to an invalid ID
-                else:
-                    if item['device_type'] == 'input':
-                        options = {teamtalk.ttstr(d.szDeviceName): d.nDeviceID for d in devices}
-                    else: # output
-                        options = {d['description']: i for i, d in enumerate(devices)}
-                    
-                    value = self._ask_choice(self._("Select {type} Device").format(type=item['device_type'].title()), "", options)
 
             # Store the collected value
             if (section, key) not in collected_values:
@@ -460,49 +382,11 @@ class ConfigHandler:
                 "char_limit": bot_section.getint("char_limit", 0),
                 "char_limit_mode": bot_section.getint("char_limit_mode", 1),
                 "blacklist_mode": bot_section.getint("blacklist_mode", 1),
-                "video_deletion_timer": bot_section.getint("video_deletion_timer", 15),
                 "banned_countries": [c.strip() for c in bot_section.get("banned_countries", "").split(",") if c.strip()],
             }
         except (configparser.Error, KeyError, ValueError) as e:
             print(self._("Config file error in [bot] section: {e}. Please delete config.ini and run again.").format(e=e))
             sys.exit(1)
-
-    def get_playback_config(self):
-        try:
-            playback_section = self.config["playback"]
-            return {
-                "input_device": playback_section.getint("input_device"),
-                "output_device": playback_section.getint("output_device"),
-                "seek_step": playback_section.getint("seek_step", 5),
-                "default_volume": playback_section.getint("default_volume", 80),
-                "max_volume": playback_section.getint("max_volume", 100),
-                "send_channel_messages": playback_section.getboolean("send_channel_messages", True),
-                "channel_messages_mode": playback_section.get("channel_messages_mode", "private"),
-                "volume_fading": playback_section.getfloat("volume_fading", fallback=0.0),
-                "cookiefile_path": playback_section.get("cookiefile_path", fallback=None),
-            }
-        except (configparser.Error, KeyError, ValueError) as e:
-            print(self._("Config file error in [playback] section: {e}. Please delete config.ini and run again.").format(e=e))
-            sys.exit(1)
-
-    def save_playback_config(self, playback_config):
-        """Saves the playback configuration section to the config file."""
-        try:
-            self.config["playback"] = {
-                "input_device": playback_config.get("input_device"),
-                "output_device": playback_config.get("output_device"),
-                "seek_step": playback_config.get("seek_step", 5),
-                "default_volume": playback_config.get("default_volume", 80),
-                "max_volume": playback_config.get("max_volume", 100),
-                "send_channel_messages": str(playback_config.get("send_channel_messages", True)),
-                "channel_messages_mode": playback_config.get("channel_messages_mode", "private"),
-                "volume_fading": playback_config.get("volume_fading", 0.0),
-                "cookiefile_path": playback_config.get("cookiefile_path") or "",
-            }
-            with open(self.config_file, "w", encoding="utf-8") as configfile:
-                self.config.write(configfile)
-        except (configparser.Error, KeyError) as e:
-            print(self._(f"Error saving playback config: {e}"))
 
     def get_telegram_config(self):
         try:
@@ -570,31 +454,15 @@ class ConfigHandler:
     def save_bot_config(self, bot_config):
         """Saves the bot configuration section to the config file."""
         try:
-            self.config["bot"] = {
-                "nickname": str(bot_config["nickname"]),
-                "client_name": str(bot_config["client_name"]),
-                "gender": str(bot_config["gender"]),
-                "language": str(bot_config["language"]),
-                "default_channel": str(bot_config['default_channel']),
-                "channel_password": str(bot_config['channel_password']),
-                "status_message": str(bot_config["status_message"]),
-                "welcome_broadcast": str(bot_config.get('welcome_broadcast', True)),
-                "vpn_detection": str(bot_config['vpn_detection']),
-                "prevent_noname": str(bot_config['prevent_noname']),
-                "noname_note": str(bot_config['noname_note']),
-                "intercept_channel_messages": str(bot_config['intercept_channel_messages']),
-                "jail_users": ",".join(bot_config["jail_users"]),
-                "jail_names": ",".join(bot_config["jail_names"]),
-                "jail_channel": str(bot_config["jail_channel"]),
-                "jail_timer_seconds": str(bot_config["jail_timer_seconds"]),
-                "jail_flood_count": str(bot_config["jail_flood_count"]),
-                "random_message_interval": str(bot_config["random_message_interval"]),
-                "char_limit": str(bot_config["char_limit"]),
-                "char_limit_mode": str(bot_config["char_limit_mode"]),
-                "blacklist_mode": str(bot_config["blacklist_mode"]),
-                "video_deletion_timer": str(bot_config["video_deletion_timer"]),
-                "banned_countries": ",".join(bot_config["banned_countries"]),
-            }
+            if "bot" not in self.config:
+                self.config.add_section("bot")
+                
+            for key, value in bot_config.items():
+                if isinstance(value, list):
+                    self.config.set("bot", key, ",".join(value))
+                else:
+                    self.config.set("bot", key, str(value))
+                    
             with open(self.config_file, "w", encoding="utf-8") as configfile:
                 self.config.write(configfile)
         except (configparser.Error, KeyError) as e:

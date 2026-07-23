@@ -22,7 +22,11 @@ elif sys.platform == "darwin":
     TTCHAR_P = c_char_p
     BOOL = c_int
 else:
-    dll = cdll.LoadLibrary("libTeamTalk5.so")
+    dll_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "TeamTalk_DLL", "libTeamTalk5.so")
+    if os.path.exists(dll_path):
+        dll = cdll.LoadLibrary(dll_path)
+    else:
+        dll = cdll.LoadLibrary("libTeamTalk5.so")
     TTCHAR = c_char
     TTCHAR_P = c_char_p
     BOOL = c_int

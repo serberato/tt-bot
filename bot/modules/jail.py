@@ -88,6 +88,8 @@ class JailCog:
             if jail_channel_id:
                 self.bot.doMoveUser(user.nUserID, jail_channel_id)
                 self.bot.send_message(self._("{nickname} has been jailed.").format(nickname=nickname))
+            else:
+                self.bot.privateMessage(textmessage.nFromUserID, self._("Error: The jail channel '{channel}' does not exist on the server. Please create it first.").format(channel=self.bot.bot_config["jail_channel"]))
         else:
             self.bot.privateMessage(textmessage.nFromUserID, self._("User '{nickname}' not found.").format(nickname=nickname))
 

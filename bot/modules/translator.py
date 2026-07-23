@@ -14,7 +14,7 @@ class TranslatorCog:
     def __init__(self, bot):
         self.bot = bot
         self._ = bot._
-        self.translation_pool = LoggingThreadPoolExecutor(max_workers=30, thread_name_prefix='TTBot_Translation')
+        self.translation_pool = LoggingThreadPoolExecutor(max_workers=10, thread_name_prefix='TTBot_Translation')
         self.auto_translate = False
         self.source_lang = 'auto'
         self.target_lang = 'en'
@@ -29,6 +29,11 @@ class TranslatorCog:
         command_handler.register_command('t', self.handle_t_command, help_text=self._("Toggles auto-translation for channel messages. Usage: /t <source_language_code> <target_language_code>. If the mode is already active, send /t again without arguments to disable."))
         command_handler.register_command('pt', self.handle_pt_command, help_text=self._("Toggles private translation mode for you. Usage: /pt <source_language_code> <target_language_code>. If the mode is already active, send /pt again without arguments to disable."))
         command_handler.register_command('wt', self.handle_wt_command, help_text=self._("Toggles whisper translate mode, sending you private translations of channel messages. Usage: /wt <source_language_code> <target_language_code>"))
+
+    def shutdown(self):
+        """Cleans up the translation thread pool."""
+        if self.translation_pool:
+            self.translation_pool.shutdown(wait=False)
 
     def on_user_parted(self, user):
         """Cleans up translation state when a user leaves."""

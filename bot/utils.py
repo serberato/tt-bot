@@ -1,8 +1,7 @@
 import sys
 import os
 import requests
-import zipfile
-from tqdm import tqdm
+
 import random
 import string
 import logging
@@ -35,57 +34,27 @@ class BotUtils:
         except FileNotFoundError:
             return ["Welcome, {name}!"]
 
+    _blacklist_cache = None
+    _blacklist_mtime = 0
+
     @staticmethod
     def load_blacklist(filename="blacklist.txt"):
-        """Loads a blacklist from a file, converting to lowercase."""
+        """Loads a blacklist from a file, converting to lowercase. Caches based on file modification time."""
         try:
-            with open(filename, "r", encoding="utf-8") as f:
-                return [line.strip().lower() for line in f]
+            mtime = os.path.getmtime(filename)
         except FileNotFoundError:
             return []
-
-    @staticmethod
-    def check_for_updates(gettext_func):
-        """
-        Checks for updates, downloads, and extracts them if a new version is found.
-        
-        Args:
-            gettext_func (function): The gettext function (e.g., `bot._`) for translations.
-        """
-        _ = gettext_func
-        update_url = "https://blindmasters.org/tt_utilities/version.txt"
-        download_url = "https://blindmasters.org/tt_utilities/tt_utilities.zip"
-
+            
+        if BotUtils._blacklist_cache is not None and BotUtils._blacklist_mtime == mtime:
+            return BotUtils._blacklist_cache
+            
         try:
-            print(_("Checking for updates..."))
-            response = requests.get(update_url)
-            response.raise_for_status()
-            server_version = response.text.strip()
-
-            if server_version > BotUtils.VERSION:
-                print(_("A new version has been detected: {server_version}").format(server_version=server_version))
-                download_response = requests.get(download_url, stream=True)
-                download_response.raise_for_status()
-                total_size = int(download_response.headers.get('content-length', 0))
-                zip_filename = "tt_utilities_update.zip"
-                with open(zip_filename, "wb") as f, tqdm(
-                    desc=zip_filename, total=total_size, unit='iB', unit_scale=True, unit_divisor=1024,
-                ) as bar:
-                    for data in download_response.iter_content(4096):
-                        size = f.write(data)
-                        bar.update(size)
-
-                with zipfile.ZipFile(zip_filename, "r") as zip_ref:
-                    zip_ref.extractall(".")
-
-                print(_("Update downloaded and extracted successfully!"))
-                os.remove(zip_filename)
-                input(_("Press Enter to quit and run the new version."))
-                sys.exit(0)
-            else:
-                print(_("No updates found. You are running the latest version: {version}").format(version=BotUtils.VERSION))
-        except requests.exceptions.RequestException as e:
-            print(_("Failed to check for updates: {error}").format(error=e))
+            with open(filename, "r", encoding="utf-8") as f:
+                BotUtils._blacklist_cache = [line.strip().lower() for line in f]
+                BotUtils._blacklist_mtime = mtime
+                return BotUtils._blacklist_cache
+        except FileNotFoundError:
+            return []
 
 
     @staticmethod

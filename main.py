@@ -4,62 +4,19 @@ import sys
 import os
 import threading
 import TeamTalk5 as teamtalk
-import mpv
 from TeamTalk5 import ttstr
 from bot.tt_utilities import TTUtilities
 from bot.config_handler import ConfigHandler
 from bot.account import Account
 from bot.utils import BotUtils as utils, ShutdownSignal, RestartSignal
 
-def list_audio_devices():
-    """
-    Lists available audio input and output devices and then exits.
-    """
-    print("--- Audio Devices ---")    
-    try:
-        tt = teamtalk.TeamTalk()
-        devices = tt.getSoundDevices()
-        input_devices = [d for d in devices if d.nMaxInputChannels > 0]
-        tt.closeTeamTalk()
-
-        print("\nInput Devices:")
-        if not input_devices:
-            print("  No input devices found.")
-        else:
-            for device in input_devices:
-                print(f"{device.nDeviceID}: {ttstr(device.szDeviceName)}")
-    except Exception as e:
-        print(f"  Could not list TeamTalk input devices: {e}")
-
-    try:
-        player = mpv.MPV(vo='null', video=False)
-        output_devices = player.audio_device_list
-        player.terminate()
-
-        print("\nOutput Devices:")
-        if not output_devices:
-            print("  No output devices found.")
-        else:
-            for i, device in enumerate(output_devices):
-                print(f"{i}: {device.get('description', 'N/A')}")
-    except Exception as e:
-        print(f"  Could not list output devices: {e}")
-
-    sys.exit(0)
-
 def main():
     """
     Main function to set up and run the bot.
     """
     parser = argparse.ArgumentParser(description="TeamTalk Utilities Bot")
-    parser.add_argument("-c", "--cookiefile", help="Path to a cookies file for yt-dlp.")
-    parser.add_argument("-d", "--devices", action="store_true", help="List available audio devices.")
     parser.add_argument("-f", "--configfile", help="Path to a custom configuration file.")
     args = parser.parse_args()
-
-    # If --devices flag is used, list devices and exit immediately.
-    if args.devices:
-        list_audio_devices()
 
     # If a config file path is provided, check if it actually exists.
     if args.configfile and not os.path.isfile(args.configfile):
@@ -78,8 +35,7 @@ def main():
 
             bot = TTUtilities(
                 config_handler=config, 
-                account_creator=accounts,
-                cookiefile=args.cookiefile
+                account_creator=accounts
             )
         except Exception as e:
             logging.error(f"Failed to initialize the bot: {e}")
@@ -99,7 +55,7 @@ def main():
         restart = False
         while True:  # Inner loop for event handling
             try:
-                bot.runEventLoop()
+                bot.runEventLoop(100) # Wait 100ms to allow Python to catch signals like Ctrl+C
             except KeyboardInterrupt:
                 print("\nShutting down bot...")
                 bot.shutdown()

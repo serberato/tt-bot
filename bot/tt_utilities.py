@@ -6,8 +6,6 @@ from bot.utils import BotUtils as utils, LoggingThreadPoolExecutor
 from bot.modules.admin import AdminCog
 from bot.modules.general import GeneralCog
 from bot.modules.jail import JailCog
-from bot.modules.tts import TTSCog
-from bot.modules.player import PlayerCog
 from bot.modules.translator import TranslatorCog
 from bot.user_manager import UserManager
 import gettext
@@ -20,29 +18,25 @@ import random
 import threading
 from threading import Thread, Lock
 from concurrent.futures import ThreadPoolExecutor
-from bot.player import Player
 
 
 class TTUtilities(TeamTalk):
-    def __init__(self, config_handler, account_creator, cookiefile=None):
+    def __init__(self, config_handler, account_creator):
         self.config_handler = config_handler
         self.account_creator = account_creator
 
         # Load config from the config handler
         self.server_config = self.config_handler.get_server_config()
         self.bot_config = self.config_handler.get_bot_config()
-        self.playback_config = self.config_handler.get_playback_config()
         self.telegram_config = self.config_handler.get_telegram_config()
         self.exclusion_config = self.config_handler.get_exclusion_config()
         self.accounts_config = self.config_handler.get_accounts_config()
         self.weather_config = self.config_handler.get_weather_config()
         self.ssh_config = self.config_handler.get_ssh_config()
         self.teamtalk_license_config = self.config_handler.get_teamtalk_license_config()
-        self.cookiefile = cookiefile or self.playback_config.get("cookiefile_path")
 
         self.io_pool = None
         self.quick_task_pool = None
-        self.player = Player(self.config_handler, cookiefile=self.cookiefile)
         self.command_handler = CommandHandler(self, prefix='/')
         self.commands_locked = False
         self.initialize_connection()
@@ -78,13 +72,6 @@ class TTUtilities(TeamTalk):
         if self.teamtalk_license_config.get('license_name') and self.teamtalk_license_config.get('license_key'):
             TeamTalk5.setLicense(ttstr(self.teamtalk_license_config['license_name']), ttstr(self.teamtalk_license_config['license_key']))
 
-        utils.check_for_updates(self._)
-        try:
-            print(self._("Initializing audio devices..."))
-            self.initSoundInputDevice(self.playback_config['input_device'])
-            print(self._("Audio devices Initialized."))
-        except Exception as e:
-            print(self._("Error while initializing audio devices: {e}").format(e=e))
 
         try:
             print(self._("Connecting to {address}:{port}...").format(
@@ -100,10 +87,6 @@ class TTUtilities(TeamTalk):
         """Cleanly shuts down all resources used by the bot instance."""
         print("Shutdown sequence started.")
         try:
-            print("Terminating media player...")
-            self.player.terminate()
-            print("Media player terminated.")
-
             print("Disconnecting from TeamTalk server...")
             self.disconnect()
             print("Disconnected from server.")
@@ -111,6 +94,10 @@ class TTUtilities(TeamTalk):
             print("Closing TeamTalk instance...")
             self.closeTeamTalk()
             print("TeamTalk instance closed.")
+
+            if hasattr(self, 'translator_cog') and self.translator_cog:
+                print("Shutting down Translator pool...")
+                self.translator_cog.shutdown()
 
             if self.io_pool:
                 print("Shutting down IO thread pool...")
@@ -132,8 +119,6 @@ class TTUtilities(TeamTalk):
         """Initializes and registers all command cogs."""
         self.general_cog = GeneralCog(self)
         self.user_manager = UserManager(self)
-        self.tts_cog = TTSCog(self)
-        self.player_cog = PlayerCog(self)
         self.translator_cog = TranslatorCog(self)
         self.admin_cog = AdminCog(self)
         self.jail_cog = JailCog(self)
@@ -141,8 +126,6 @@ class TTUtilities(TeamTalk):
         cogs_to_register = [
             self.general_cog,
             self.user_manager,
-            self.tts_cog,
-            self.player_cog,
             self.translator_cog,
             self.admin_cog,
             self.jail_cog
@@ -169,8 +152,12 @@ class TTUtilities(TeamTalk):
         """Performs a full, in-process reconnect by shutting down and re-initializing."""
         print(self._("Connection lost. Attempting to reconnect in 5 seconds..."))
         self.shutdown()
-        time.sleep(5)
-        self.initialize_connection()
+        
+        def _reconnect_task():
+            time.sleep(5)
+            self.initialize_connection()
+            
+        Thread(target=_reconnect_task, daemon=True).start()
     
     def onCmdMyselfLoggedIn(self, userid, useraccount):
         print(self._("Logged in successfully"))
@@ -189,22 +176,25 @@ class TTUtilities(TeamTalk):
 
     def onCmdMyselfKickedFromChannel(self, channelid, user):
         print(self._("I've been kicked from the channel. Reconnecting in 5 seconds..."))
-        time.sleep(5)
-        self.doLogin(ttstr(self.bot_config["nickname"]), ttstr(self.server_config["username"]), ttstr(self.server_config["password"]), ttstr(self.bot_config["client_name"]))
-        time.sleep(0.1)
-        self.doJoinChannelByID(self.getRootChannelID(), ttstr(""))
-        time.sleep(0.1)
-        self.subscribe_user_messages()
-        self.subscribe_channel_messages()
-        time.sleep(0.1)
-        if self.bot_config["status_message"] is not None:
-            self.doChangeStatus(ttstr(self.bot_config["gender"]), ttstr(self.bot_config["status_message"]))
-        else:
-            self.doChangeStatus(ttstr(self.bot_config["gender"]), ttstr(""))
-        time.sleep(0.1)
-        self.send_broadcast_message(self._("Hey! Why did you kick me?"))
-
-        self.config_handler.read_config_file()
+        
+        def _rejoin_task():
+            time.sleep(5)
+            self.doLogin(ttstr(self.bot_config["nickname"]), ttstr(self.server_config["username"]), ttstr(self.server_config["password"]), ttstr(self.bot_config["client_name"]))
+            time.sleep(0.1)
+            self.doJoinChannelByID(self.getRootChannelID(), ttstr(""))
+            time.sleep(0.1)
+            self.subscribe_user_messages()
+            self.subscribe_channel_messages()
+            time.sleep(0.1)
+            if self.bot_config["status_message"] is not None:
+                self.doChangeStatus(ttstr(self.bot_config["gender"]), ttstr(self.bot_config["status_message"]))
+            else:
+                self.doChangeStatus(ttstr(self.bot_config["gender"]), ttstr(""))
+            time.sleep(0.1)
+            self.send_broadcast_message(self._("Hey! Why did you kick me?"))
+            self.config_handler.read_config_file()
+            
+        self.quick_task_pool.submit(_rejoin_task)
 
     def subscribe_user_messages(self):
         users = self.getServerUsers()
@@ -213,8 +203,11 @@ class TTUtilities(TeamTalk):
             self.doSubscribe(user.nUserID, Subscription.SUBSCRIBE_USER_MSG)
             if self.bot_config['intercept_channel_messages'] is True:
                 self.doSubscribe(user.nUserID, 131072)
-                print(self._("intercepting channel messages for user {user}").format(user=ttstr(user.szNickname)))
-        print(self._("subscribed to user messages"))
+                
+    def subscribe_single_user_messages(self, user: User):
+        self.doSubscribe(user.nUserID, Subscription.SUBSCRIBE_USER_MSG)
+        if self.bot_config['intercept_channel_messages'] is True:
+            self.doSubscribe(user.nUserID, 131072)
 
     def subscribe_channel_messages(self):
         channel_id = self.getMyChannelID()
@@ -227,7 +220,7 @@ class TTUtilities(TeamTalk):
             self.just_joined = False
             return
             
-        self.subscribe_user_messages()
+        self.subscribe_single_user_messages(user)
         if self.accounts_config['detect_server_admins'] is True and user.uUserType == UserType.USERTYPE_ADMIN:
             username_lower = ttstr(user.szUsername).lower()
             if username_lower not in [u.lower() for u in self.accounts_config['authorized_users']]:
@@ -250,12 +243,10 @@ class TTUtilities(TeamTalk):
     def onCmdUserLeftChannel(self, channelid: int, user: User):
         self.user_manager.on_user_parted(user)
         self.translator_cog.on_user_parted(user)
-        self.tts_cog.on_user_parted(user)
 
     def onCmdUserLoggedOut(self, user: User):
         self.user_manager.on_user_parted(user)
         self.translator_cog.on_user_parted(user)
-        self.tts_cog.on_user_parted(user)
 
     def split_long_message(self, message, chunk_size=500):
         chunks = []
@@ -275,11 +266,6 @@ class TTUtilities(TeamTalk):
         print(self._("Message received: {message} from {username}").format(message=message_text, username=ttstr(textmessage.szFromUsername)))
         
         if self.admin_cog.check_message_for_blacklist(textmessage):
-            return
-
-        if self.tts_cog.handle_prefixed_message(textmessage):
-            return
-        if self.player_cog.handle_prefixed_message(textmessage):
             return
 
         if message_text.startswith(self.command_handler.prefix):
@@ -357,39 +343,11 @@ class TTUtilities(TeamTalk):
         self.doKickUser(user_id, 0)
 
     def ban_user(self, user_id, ban_type=BanType.BANTYPE_USERNAME):
-        banned_user = BannedUser()
-        while True:
-            user = self.getUser(user_id)
-            if user is not None:
-                break
-            else:
-                continue
-        if ban_type == BanType.BANTYPE_IPADDR:
-            while True:
-                ip_address=user.szIPAddress
-                if ip_address is None or ip_address == "":
-                    continue
-                else:
-                    banned_user.szIPAddress =ip_address
-                    break
-            self.banned_users[user.szIPAddress] = banned_user
-            banned_user.uBanTypes =BanType.BANTYPE_IPADDR
+        # Delegate to admin_cog where proper state management is handled
+        if hasattr(self, 'admin_cog'):
+            self.admin_cog.ban_user(user_id, ban_type)
         else:
-            if user.szUsername=='guest' or user.szUsername==self.accounts_config['custom_username']:
-                while True:
-                    ip_address=user.szIPAddress
-                    if ip_address is None or ip_address == "":
-                        continue
-                    else:
-                        banned_user.szIPAddress =ip_address
-                        break
-                self.banned_users[user.szIPAddress] = banned_user
-                banned_user.uBanTypes =BanType.BANTYPE_IPADDR
-            else:
-                banned_user.szUsername = user.szUsername
-                self.banned_users[user.szUsername] = banned_user
-                banned_user.uBanTypes =BanType.BANTYPE_USERNAME
-        self.doBan(banned_user)
+            print(f"Cannot ban user {user_id}: admin_cog not initialized.")
 
     def send_broadcast_messages_at_intervals(self, messages):
         random.seed()

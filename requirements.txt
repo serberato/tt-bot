@@ -1,15 +1,8 @@
 configparser
 requests
-tqdm
 paramiko
 wikipedia
 langdetect
-gtts
 deep_translator
-edge-tts
-wxpython
-yt_dlp[default]
-py-yt-search
-mpv
 beautifulsoup4
-patool
+py7zr

@@ -36,7 +36,7 @@ def download_file_from_url(url: str, file_path: str) -> None:
     """Downloads a file from a URL with a TQDM progress bar."""
     print(f"Downloading from: {url}")
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+        headers = {'User-Agent': 'Mozilla/5.0'}
         with requests.get(url, headers=headers, stream=True) as r:
             r.raise_for_status()
             total_size = int(r.headers.get('content-length', 0))
@@ -62,7 +62,7 @@ def download_file_from_url(url: str, file_path: str) -> None:
 
 def do_download_and_extract() -> None:
     """Handles the entire process of downloading and extracting the SDK."""
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         print(f"Fetching available SDK versions from {SDK_BASE_URL}...")
         r = requests.get(SDK_BASE_URL, headers=headers)
@@ -86,13 +86,17 @@ def do_download_and_extract() -> None:
 
     print(f"Extracting {DOWNLOAD_FILE}...")
     try:
-        patoolib.extract_archive(DOWNLOAD_FILE, outdir=".", verbosity=-1)
+        import py7zr
+        with py7zr.SevenZipFile(DOWNLOAD_FILE, mode='r') as z:
+            z.extractall()
         print("Extraction complete.")
+    except ImportError:
+        print("Please install py7zr using: pip install py7zr", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
         print(f"Failed to extract archive: {e}", file=sys.stderr)
-        print("Please ensure 7-Zip is installed and accessible in your system's PATH.", file=sys.stderr)
         if os.path.exists(DOWNLOAD_FILE):
-            os.remove(DOWNLOAD_FILE) # Clean up failed download
+            os.remove(DOWNLOAD_FILE)
         sys.exit(1)
 
     extracted_parent_folder = f"tt5sdk_{version}_{platform_suffix}"

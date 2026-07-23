@@ -45,7 +45,7 @@ main() {
     # shellcheck source=/dev/null
     . /etc/os-release
     if [[ "$ID" == "debian" || "$ID" == "ubuntu" ]]; then
-        PACKAGES="pulseaudio libmpv-dev mpv ffmpeg python3 python3-dev python3-pip git p7zip-full"
+        PACKAGES="python3 python3-dev python3-pip git p7zip-full"
         echo "Updating package list..."
         sudo apt-get update -qq
         echo "Installing: ${PACKAGES}..."
@@ -54,7 +54,7 @@ main() {
     else
         echo -e "${C_YELLOW}Warning: Non-Debian based distribution ('${ID}') detected.${C_RESET}"
         echo "Please ensure the following packages (or equivalents) are installed:"
-        echo "pulseaudio, libmpv-dev, mpv, ffmpeg, python3, pip, git, 7zip"
+        echo "python3, pip, git, 7zip"
         read -p "Press [Enter] to continue if they are installed, or Ctrl+C to exit."
     fi
 
@@ -87,45 +87,9 @@ main() {
     fi
     print_success "TeamTalk SDK configured successfully."
 
-    print_step "5 of 6" "Configuring service installation..."
-    INSTALL_TYPE=""
-    while [[ -z "$INSTALL_TYPE" ]]; do
-        read -p "Install services system-wide or for the current user? [system/user]: " choice
-        case "$choice" in
-            s|S|system|SYSTEM) INSTALL_TYPE="system" ;;
-            u|U|user|USER) INSTALL_TYPE="user" ;;
-            *) echo -e "${C_YELLOW}Invalid input. Please enter 'system' or 'user'.${C_RESET}" ;;
-        esac
-    done
-
-    print_step "6 of 6" "Finalizing installation..."
-    if [ "$INSTALL_TYPE" == "user" ]; then
-        SERVICE_DIR="$HOME/.config/systemd/user"
-        SYSTEMCTL_CMD="systemctl --user"
-        echo "Configuring services for the current user ($USER)..."
-        # Enable lingering to allow user services to run after logout
-        if ! sudo loginctl show-user "$USER" | grep -q "Linger=yes"; then
-            echo "Enabling user lingering..."
-            sudo loginctl enable-linger "$USER"
-        fi
-        mkdir -p "${SERVICE_DIR}"
-        cp systemd/user/*.service "${SERVICE_DIR}/"
-        cp systemd/user/pulseaudio.socket "${SERVICE_DIR}/"
-    else
-        SERVICE_DIR="/etc/systemd/system"
-        SYSTEMCTL_CMD="sudo systemctl"
-        echo "Configuring system-wide services..."
-        sudo cp systemd/user/*.* "${SERVICE_DIR}/"
-    fi
-    
-    echo "Installing TeamTalk library..."
-    sudo cp TeamTalk_DLL/libTeamTalk5.so /usr/lib/
-    sudo ldconfig
-
-    echo "Reloading systemd and enabling services..."
-    $SYSTEMCTL_CMD daemon-reload
-    $SYSTEMCTL_CMD enable --now pulseaudio.service pulseaudio.socket
-    print_success "Services have been configured and started."
+    print_step "5 of 5" "Finalizing installation..."
+    echo "The TeamTalk SDK is now configured to load locally from the TeamTalk_DLL folder."
+    print_success "Installation finalized without requiring root privileges."
 
     echo
     echo -e "  Setup is Complete!"
