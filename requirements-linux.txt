@@ -1,7 +1,6 @@
 configparser
 requests
 tqdm
-paramiko
 wikipedia
 langdetect
 deep_translator

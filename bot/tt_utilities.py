@@ -32,7 +32,6 @@ class TTUtilities(TeamTalk):
         self.exclusion_config = self.config_handler.get_exclusion_config()
         self.accounts_config = self.config_handler.get_accounts_config()
         self.weather_config = self.config_handler.get_weather_config()
-        self.ssh_config = self.config_handler.get_ssh_config()
         self.teamtalk_license_config = self.config_handler.get_teamtalk_license_config()
 
         self.io_pool = None

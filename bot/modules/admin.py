@@ -3,9 +3,9 @@ from bot.utils import BotUtils as utils, ShutdownSignal, RestartSignal
 import TeamTalk5 as teamtalk
 import time
 from threading import Thread
-import paramiko
 import re
 import os
+import subprocess
 
 class AdminCog:
     """
@@ -39,8 +39,9 @@ class AdminCog:
 
     def register(self, command_handler):
         """Registers all the admin commands."""
-        command_handler.register_command('reboot', self.handle_reboot_command, admin_only=True, help_text=self._("Reboots the server."))
-        command_handler.register_command('exec', self.handle_exec_command, admin_only=True, help_text=self._("Executes a command on the server via SSH. Usage: /exec <command>"))
+        command_handler.register_command('reboot', self.handle_reboot_command, admin_only=True, help_text=self._("Reboots the TeamTalk server."))
+        command_handler.register_command('restartbots', self.handle_restartbots_command, admin_only=True, help_text=self._("Restarts all TTSpotify bots."))
+        command_handler.register_command('exec', self.handle_exec_command, admin_only=True, help_text=self._("Executes a local command on the server. Usage: /exec <command>"))
         command_handler.register_command('db', self.handle_duration_ban_ip, admin_only=True, help_text=self._("Bans a user by IP for a duration. Usage: /db <name> <duration> (e.g., 1h30m)"))
         command_handler.register_command('udb', self.handle_duration_ban_user, admin_only=True, help_text=self._("Bans a username for a duration. Usage: /udb <username> <duration>"))
         command_handler.register_command('dk', self.handle_duration_kick_nickname, admin_only=True, help_text=self._("Kicks a user by nickname for a duration. Usage: /dk <name> <duration>"))
@@ -191,45 +192,51 @@ class AdminCog:
         return False
 
     def handle_reboot_command(self, textmessage, *args):
-        self.bot.send_broadcast_message(self._("Attention, The server is rebooting..."))
-        self._execute_ssh_command("reboot", textmessage.nFromUserID)
+        self.bot.send_broadcast_message(self._("Attention, The TeamTalk server is rebooting..."))
+        try:
+            # Trigger the systemd.path watcher via file modification
+            open('/tmp/reiniciar_cesar', 'a').close()
+            os.utime('/tmp/reiniciar_cesar', None)
+            self.bot.privateMessage(textmessage.nFromUserID, self._("Reboot signal sent successfully."))
+        except Exception as e:
+            self.bot.privateMessage(textmessage.nFromUserID, self._(f"Failed to send reboot signal: {e}"))
+
+    def handle_restartbots_command(self, textmessage, *args):
+        self.bot.privateMessage(textmessage.nFromUserID, self._("Restarting TTSpotify bots..."))
+        bots = ["ttspotify@cesar.service", "ttspotify@cesar2.service", "ttspotify@cesar3.service"]
+        command = ["systemctl", "--user", "restart"] + bots
+        self._execute_local_command(command, textmessage.nFromUserID)
 
     def handle_exec_command(self, textmessage, *args):
         if not args:
             self.bot.privateMessage(textmessage.nFromUserID, self._("Usage: /exec <command>"))
             return
         command = " ".join(args)
-        self._execute_ssh_command(command, textmessage.nFromUserID)
+        self._execute_local_command(command, textmessage.nFromUserID, shell=True)
 
-    def _execute_ssh_command(self, command, user_id):
-        user_ip = ttstr(self.bot.getUser(user_id).szIPAddress)
-        if user_ip not in self.bot.ssh_config.get('allowed_ips', []):
-            self.bot.privateMessage(user_id, self._("Not authorized for this IP address."))
-            return
-        
-        def ssh_task():
+    def _execute_local_command(self, command, user_id, shell=False):
+        def task():
             try:
-                with paramiko.SSHClient() as ssh_client:
-                    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                    ssh_client.connect(
-                        hostname=self.bot.ssh_config["hostname"],
-                        port=self.bot.ssh_config["port"],
-                        username=self.bot.ssh_config["username"],
-                        password=self.bot.ssh_config["password"],
-                        timeout=10
-                    )
-                    _, stdout, stderr = ssh_client.exec_command(command, timeout=30)
-                    output = stdout.read().decode('utf-8', errors='ignore')
-                    error = stderr.read().decode('utf-8', errors='ignore')
+                result = subprocess.run(
+                    command,
+                    shell=shell,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                output = result.stdout
+                error = result.stderr
 
-                    if error: self.bot.privateMessage(user_id, f"Error: {error}")
-                    if output:
-                        for chunk in self.bot.split_long_message(output):
-                            self.bot.privateMessage(user_id, chunk)
+                if error: self.bot.privateMessage(user_id, f"Error/Warning:\n{error}")
+                if output:
+                    for chunk in self.bot.split_long_message(output):
+                        self.bot.privateMessage(user_id, chunk)
+                if not error and not output:
+                    self.bot.privateMessage(user_id, self._("Command executed successfully with no output."))
             except Exception as e:
-                self.bot.privateMessage(user_id, self._("SSH connection error: {e}").format(e=e))
+                self.bot.privateMessage(user_id, self._(f"Execution error: {e}"))
         
-        self.bot.quick_task_pool.submit(ssh_task)
+        self.bot.quick_task_pool.submit(task)
 
 
     def handle_duration_ban_ip(self, textmessage, *args):
