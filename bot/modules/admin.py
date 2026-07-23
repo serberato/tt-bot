@@ -195,8 +195,10 @@ class AdminCog:
         self.bot.send_broadcast_message(self._("Attention, The TeamTalk server is rebooting..."))
         try:
             # Trigger the systemd.path watcher via file modification
-            open('/tmp/reiniciar_cesar', 'a').close()
-            os.utime('/tmp/reiniciar_cesar', None)
+            open('/var/tmp/reiniciar_cesar', 'a').close()
+            os.utime('/var/tmp/reiniciar_cesar', None)
+            # Ensure it remains writable just in case
+            os.chmod('/var/tmp/reiniciar_cesar', 0o666)
             self.bot.privateMessage(textmessage.nFromUserID, self._("Reboot signal sent successfully."))
         except Exception as e:
             self.bot.privateMessage(textmessage.nFromUserID, self._(f"Failed to send reboot signal: {e}"))

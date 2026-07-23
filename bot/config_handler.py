@@ -422,3 +422,29 @@ class ConfigHandler:
             print(self._("Config file error in [weather] section: {e}.").format(e=e))
             return None
 
+    def get_teamtalk_license_config(self):
+        try:
+            return {
+                "license_name": self.config.get("teamtalk_license", "license_name", fallback=None),
+                "license_key": self.config.get("teamtalk_license", "license_key", fallback=None),
+            }
+        except (configparser.Error, KeyError) as e:
+            print(self._("Config file error in [teamtalk_license] section: {e}.").format(e=e))
+            return {"license_name": None, "license_key": None}
+
+    def save_bot_config(self, bot_config):
+        """Saves the bot configuration section to the config file."""
+        try:
+            if "bot" not in self.config:
+                self.config.add_section("bot")
+                
+            for key, value in bot_config.items():
+                if isinstance(value, list):
+                    self.config.set("bot", key, ",".join(value))
+                else:
+                    self.config.set("bot", key, str(value))
+                    
+            with open(self.config_file, "w", encoding="utf-8") as configfile:
+                self.config.write(configfile)
+        except (configparser.Error, KeyError) as e:
+            print(self._("Error saving bot config: {e}").format(e=e))
