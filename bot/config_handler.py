@@ -86,11 +86,6 @@ class ConfigHandler:
             {'type': 'header', 'text': self._("Optional Integrations")},
             {'section': 'telegram', 'key': 'telegram_bot_token', 'type': 'text', 'prompt': self._("Telegram Bot Token"), 'help_text': self._("Token for your Telegram bot to enable notifications. Leave blank to disable.")},
             {'section': 'weather', 'key': 'api_key', 'type': 'text', 'prompt': self._("weatherapi.com API Key"), 'help_text': self._("API key for the weather command. See the README for instructions on how to get one.")},
-            {'section': 'ssh', 'key': 'hostname', 'type': 'text', 'prompt': self._("SSH Hostname"), 'help_text': self._("Hostname or IP for the SSH server for the /exec and /reboot commands. Leave blank to disable.")},
-            {'section': 'ssh', 'key': 'port', 'type': 'int', 'prompt': self._("SSH Port"), 'default': 22},
-            {'section': 'ssh', 'key': 'username', 'type': 'text', 'prompt': self._("SSH Username")},
-            {'section': 'ssh', 'key': 'password', 'type': 'password', 'prompt': self._("SSH Password")},
-            {'section': 'ssh', 'key': 'allowed_ips', 'type': 'text', 'prompt': self._("SSH Allowed IPs"), 'help_text': self._("Comma-separated list of user IP addresses allowed to use SSH commands via the bot.")},
 
             {'type': 'header', 'text': self._("TeamTalk License (Optional)")},
             {'section': 'teamtalk_license', 'key': 'license_name', 'type': 'text', 'prompt': self._("License Name"), 'help_text': self._("Your TeamTalk SDK license name, if you have one.")},
